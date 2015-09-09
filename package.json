@@ -1,0 +1,19 @@
+{
+  "name": "ml-socket",
+  "version": "1.0.0",
+  "description": "Socket library for real time marklogic",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.13.3",
+    "marklogic": "1.0.x",
+    "md5": "^2.0.0",
+    "randomize": "0.0.4",
+    "request": "^2.61.0",
+    "socket.io": "1.3.x"
+  }
+}
