@@ -132,6 +132,10 @@ io.on('connection', function (socket) {
         console.log('user disconnected');
     });
     socket.on('listen', function (uri) {
+            if (!uri.endsWith('json') && !uri.endsWith('/')) {
+                uri = uri + "/";
+            }
+            
             if (!uriRoomMap[uri]) {
                 var roomId = md5(uri).substr(0, 8); // hash the uri to make a room name
                 var query;
