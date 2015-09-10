@@ -82,29 +82,61 @@ var alertOn = function (uri, content, event) {
         ;
 }
 
-var createAlert = function (alert, roomId) {
+var createAlert = function (alert, uri) {
+    var roomId = md5(uri).substr(0, 8); // hash the uri to make a room name
+
     return new Promise(function (success, fail) {
-        var rule = {};
-        request({
-            method: 'PUT',
-            uri: rulesUrl + roomId,
-            auth: alertAuth,
-            body: JSON.stringify(alert),
-            headers: {
-                'Content-type': 'application/json',
-                'Accept': 'application/json'
-            }
-        }, function (error, response, body) {
-            if (error) {
-                console.log(JSON.stringify(error));
-                fail();
+        if (uriRoomMap[uri]) {
+            success();
+        } else {
+            var query;
+            // If the URI is a document uri...
+            if (uri.endsWith("json")) {
+                query = {
+                    "document-query": {
+                        uri: uri
+                    }
+                }
             } else {
-                console.log("success creating alert");
-                console.log(JSON.stringify(response));
-                console.log(JSON.stringify(body));
-                success();
+                query = {
+                    "directory-query": {
+                        uri: uri,
+                        infinite: true
+                    }
+                }
             }
-        });
+
+            var alert = {
+                "rule": {
+                    "search": {
+                        "query": query
+                    }
+                }
+            };
+
+            var rule = {};
+            request({
+                    method: 'PUT',
+                    uri: rulesUrl + roomId,
+                    auth: alertAuth,
+                    body: JSON.stringify(alert),
+                    headers: {
+                        'Content-type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                }, function (error, response, body) {
+                    if (error) {
+                        console.log(JSON.stringify(error));
+                        fail();
+                    } else {
+                        console.log("success creating alert");
+                        console.log(JSON.stringify(response));
+                        console.log(JSON.stringify(body));
+                        success();
+                    }
+                }
+            );
+        }
     })
 }
 
@@ -135,95 +167,30 @@ io.on('connection', function (socket) {
             if (!uri.endsWith('json') && !uri.endsWith('/')) {
                 uri = uri + "/";
             }
-            
-            if (!uriRoomMap[uri]) {
-                var roomId = md5(uri).substr(0, 8); // hash the uri to make a room name
-                var query;
 
-                // If the URI is a document uri...
-                if (uri.endsWith("json")) {
-                    query = {
-                        "document-query": {
-                            uri: uri
-                        }
-                    }
-                } else {
-                    query = {
-                        "directory-query": {
-                            uri: uri,
-                            infinite: true
-                        }
-                    }
-                }
-
-                var alert = {
-                    "rule": {
-                        "search": {
-                            "query": query
-                        }
-                    }
-                };
-                console.log("creating alert");
-                createAlert(alert, roomId).then(
-                    function () {
-                        var qb = marklogic.queryBuilder;
-                        console.log("alert created: " + uri);
-                        uriRoomMap[uri] = roomId;
-                        socket.join(roomId);
-                        if (uri.endsWith("json")) {
-                            db.documents.read(uri).result(
-                                function (results) {
-                                    //console.log(JSON.stringify(results, null, 2));
-                                    socket.emit('result', JSON.stringify(
-                                        prepareResults(results.documents), null, 2));
-                                },
-                                function (err) {
-                                    console.log("Error");
-                                    console.log(JSON.stringify(err));
-                                }
-                            );
-                        } else {
-                            db.documents.query(qb.where(qb.directory(uri, true))).result(
-                                function (results) {
-                                    console.log(JSON.stringify(results, null, 2));
-                                    socket.emit('result', JSON.stringify(
-                                        prepareResults(results), null, 2));
-                                },
-                                function (err) {
-                                    console.log("Error");
-                                    console.log(JSON.stringify(err));
-                                }
-                            );
-                        }
-                    });
-            } else {
-                socket.join(uriRoomMap[uri]);
-                if (uri.endsWith("json")) {
-                    db.documents.read(uri).result(
-                        function (result) {
-                            //console.log(JSON.stringify(results, null, 2));
-                            socket.emit('result', JSON.stringify(result, null, 2));
-                        },
-                        function (err) {
-                            console.log("Error");
-                            console.log(JSON.stringify(err, 2));
-                        }
-                    );
-                } else {
+            createAlert(alert, uri).then(
+                function () {
                     var qb = marklogic.queryBuilder;
-                    db.documents.query(qb.where(qb.directory(uri))).result(
-                        function (results) {
-                            var output = prepareResults(results);
-                            socket.emit('result', JSON.stringify(output, null, 2));
-                        },
-                        function (err) {
-                            console.log("Error");
-                            console.log(JSON.stringify(err));
-                        }
-                    );
+                    console.log("alert created: " + uri);
+                    uriRoomMap[uri] = roomId;
+                    socket.join(roomId);
+                    if (uri.endsWith("json")) {
+                        db.documents.read(uri).result(
+                            function (results) {
+                                socket.emit('result', JSON.stringify(
+                                    prepareResults(results.documents), null, 2));
+                            }
+                        );
+                    } else {
+                        db.documents.query(qb.where(qb.directory(uri, true))).result(
+                            function (results) {
+                                socket.emit('result', JSON.stringify(
+                                    prepareResults(results), null, 2));
+                            }
+                        );
+                    }
                 }
-
-            }
+            );
         }
     );
 
