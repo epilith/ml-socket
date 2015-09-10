@@ -41,10 +41,9 @@ app.get('/', function (req, res) {
 var matchUrl = "http://" + ML_HOST + ":" + ML_PORT + "/LATEST/alert/match";
 var rulesUrl = "http://" + ML_HOST + ":" + ML_PORT + "/LATEST/alert/rules/";
 
-
 var alertOn = function (uri, content, event) {
     return new Promise(function (success, fail) {
-            console.log("alerting");
+            console.log("alerting on document " + uri);
             request({
                 auth: alertAuth,
                 method: 'GET',
@@ -62,6 +61,7 @@ var alertOn = function (uri, content, event) {
                 } else {
                     if (response.statusCode === 200) {
                         console.log("AlertOn success:");
+                        console.log(body);
                         var rules = JSON.parse(body).rules;
                         console.log(JSON.stringify(rules));
                         var rooms = [];
@@ -69,6 +69,7 @@ var alertOn = function (uri, content, event) {
                             console.log(JSON.stringify(rule));
                             rooms.push(rule.rule.name);
                         });
+                        console.log(JSON.stringify(rooms));
                         success(rooms);
                     }
                     else {
@@ -107,14 +108,28 @@ var createAlert = function (alert, roomId) {
     })
 }
 
+var prepareResults = function (input) {
+    var output = {};
+
+    input.forEach(function (result) {
+        output[result.uri] = result.content;
+    });
+    return output;
+}
+
+var prepareResult = function (input) {
+    var output;
+    var uri = input.uri;
+    output[uri] = input.content;
+    return output;
+}
 
 io.on('connection', function (socket) {
     console.log('a user connected');
+    socket.emit('message', "220 READY");
+
     socket.on('disconnect', function () {
         console.log('user disconnected');
-    });
-    socket.on('chat message', function (msg) {
-        io.emit('chat message', msg);
     });
     socket.on('listen', function (uri) {
             if (!uriRoomMap[uri]) {
@@ -154,10 +169,9 @@ io.on('connection', function (socket) {
                         if (uri.endsWith("json")) {
                             db.documents.read(uri).result(
                                 function (results) {
-                                    console.log("got it");
                                     //console.log(JSON.stringify(results, null, 2));
                                     socket.emit('result', JSON.stringify(
-                                        results[0]));
+                                        prepareResults(results.documents), null, 2));
                                 },
                                 function (err) {
                                     console.log("Error");
@@ -167,13 +181,9 @@ io.on('connection', function (socket) {
                         } else {
                             db.documents.query(qb.where(qb.directory(uri, true))).result(
                                 function (results) {
-                                    console.log("got it");
-                                    //console.log(JSON.stringify(results, null, 2));
+                                    console.log(JSON.stringify(results, null, 2));
                                     socket.emit('result', JSON.stringify(
-                                        {
-                                            directory: uri,
-                                            results: results
-                                        }));
+                                        prepareResults(results), null, 2));
                                 },
                                 function (err) {
                                     console.log("Error");
@@ -188,23 +198,19 @@ io.on('connection', function (socket) {
                     db.documents.read(uri).result(
                         function (result) {
                             //console.log(JSON.stringify(results, null, 2));
-                            socket.emit('result', JSON.stringify(result));
+                            socket.emit('result', JSON.stringify(result, null, 2));
                         },
                         function (err) {
                             console.log("Error");
-                            console.log(JSON.stringify(err));
+                            console.log(JSON.stringify(err, 2));
                         }
                     );
                 } else {
                     var qb = marklogic.queryBuilder;
                     db.documents.query(qb.where(qb.directory(uri))).result(
                         function (results) {
-                            //console.log(JSON.stringify(results, null, 2));
-                            socket.emit('result', JSON.stringify(
-                                {
-                                    directory: uri,
-                                    results: results
-                                }));
+                            var output = prepareResults(results);
+                            socket.emit('result', JSON.stringify(output, null, 2));
                         },
                         function (err) {
                             console.log("Error");
@@ -226,27 +232,30 @@ io.on('connection', function (socket) {
     socket.on('store', function (msg) {
         try {
             var data = JSON.parse(msg);
-            console.log(data.uri);
             var dir = data.dir;
             if (!dir || !dir.endsWith("/")) {
                 dir = dir + "/";
             }
-            var content = data.content;
+            var doc = data.doc;
             db.documents.write({
                 directory: dir,
                 extension: 'json',
                 contentType: 'application/json',
-                content: content
+                content: doc
             }).result(function (result) {
                 console.log(JSON.stringify(result));
                 var uri = result.documents[0].uri;
-                alertOn(uri, content).then(
+
+                alertOn(uri, doc).then(
                     function (rooms) {
-                        var message = {uri: uri, content: content};
+                        var output = {};
+                        output[uri] = doc;
+                        var message = JSON.stringify(output, 2);
+                        console.log(JSON.stringify(rooms));
                         rooms.forEach(
                             function (room) {
                                 console.log("Broadcasting to " + room);
-                                socket.broadcast.to(room).emit('stored', message);
+                                socket.broadcast.to(room).emit('stored', output);
                             }
                         )
                     }
@@ -258,8 +267,8 @@ io.on('connection', function (socket) {
             console.log(e);
             socket.error(e);
         }
-        //
     });
+
     socket.on('delete', function (uri) {
         try {
             // Delete a document at the given uri
@@ -281,9 +290,7 @@ io.on('connection', function (socket) {
             console.log(e);
             socket.error(e);
         }
-        //
     });
-
 });
 
 

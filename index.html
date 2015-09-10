@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
 <head>
-    <title>Socket.IO chat</title>
+    <title>Socket.IO demo</title>
     <style>
         * {
             margin: 0;
@@ -48,13 +48,26 @@
         #messages li:nth-child(odd) {
             background: #eee;
         }
+
+        li.message {
+            font-weight: bold
+        }
+
+        li.stored {
+            font-family: monospace;
+            white-space: pre;
+        }
+
+        li.result {
+            font-family: monospace;
+            white-space: pre;
+        }
+
     </style>
     <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
     <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
     <script>
         var socket = io();
-        console.log('blah');
-        socket.emit('chat message', 'Hi everybody!');
 
         $(document).ready(function() {
             $('form').submit(function () {
@@ -64,17 +77,17 @@
                 return false;
             });
 
-            socket.on('chat message', function(msg){
-                $('#messages').append($('<li>').text(msg));
+            socket.on('message', function(msg){
+                $('#messages').append($('<li class="message">').text(msg));
             });
 
             socket.on('result', function(msg){
-                $('#messages').append($('<li>').text(msg));
+                $('#messages').append($('<li class="result">').text(msg));
                 console.log(msg);
             });
 
             socket.on('stored', function(msg){
-                $('#messages').append($('<li>').text(JSON.stringify(msg)));
+                $('#messages').append($('<li class="stored">').text(JSON.stringify(msg)));
                 console.log(msg);
             });
         });
